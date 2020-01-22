@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html>
+<script src="https://www.gstatic.com/charts/loader.js"></script>
+
+<script src="https://ajax.googleapis.com/ajax/libs/jquery/2.2.0/jquery.min.js"></script>
+<script src="https://ajax.googleapis.com/ajax/libs/jqueryui/1.12.1/jquery-ui.min.js"></script>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.4.0/dist/leaflet.css"
+   integrity="sha512-puBpdR0798OZvTTbP4A8Ix/l+A4dHDD0DGqYW6RQ+9jxkRFclaxxQb/SJAWZfWAkuyeQUytO7+7N4QKrDh+drA=="
+   crossorigin=""/>
+  <script src="https://unpkg.com/leaflet@1.4.0/dist/leaflet.js"
+   integrity="sha512-QVftwZFqvtRNi0ZyCtsznlKSWOStnDORoefr1enyq5mVL4tmKB3S/EnC3rRJcxCPavG10IcrVGSmPh6Qw5lwrg=="
+   crossorigin=""></script>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/wicket/1.3.2/wicket.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/wicket/1.3.2/wicket-leaflet.min.js"></script>
+
+   <?!= include('java'); ?>
+   <?!= include('css'); ?>
+<link rel="stylesheet" type="text/css" href="https://ajax.googleapis.com/ajax/libs/jqueryui/1.12.1/themes/smoothness/jquery-ui.css" />
+<div id="loading">
+  <img id="loading-image" src="https://raw.githubusercontent.com/amealor/watershed/master/cSHRMP%20logo%20text.png" alt="Loading..." />
+</div>
+<div class="header">
+ <div class="header-content-inner">
+   <img src="https://raw.githubusercontent.com/amealor/watershed/master/cSHRMP%20just%20shrimp2.png">
+   <h1>cSHRMP</h1>
+  </div>
+  <p>Climate Smart Habitat Riparian Model Planner</p>
+</div>
+
+<div class="dashboard">
+  <div class="accordion">
+  <h3>
+      <span>Step 1: Select Location&nbsp;</span>
+    </h3>
+  <div id="mapid"></div>
+
+    <h3>
+      <span>Step 2: Select Species&nbsp;</span>
+      <button class="button-reset ui-button ui-widget ui-corner-all ui-button-icon-only" title="Clear filter...">
+        <span class="ui-icon ui-icon-close"></span>
+      </button>
+    </h3>
+    <div>
+    
+      <label for="spinner">Select a Watershed Number:</label><input id="spinner" name="value"><br/>
+      <input type="button" id="listButton" data-id="#qTest.Image_ID#" value="Add Species Planting List" /><br/>
+      <div id="msgbox">
+         <p>Enter a Planting List:</p>
+    <textarea id="ta" rows="5" cols="30"></textarea>
+</div>
+      <ul class="selectable"></ul>
+    </div>
+   <!-- <input type="button" id="reportButton" data-id="#qTest.Image_ID#" value="Create Report"> -->
+  </div><br/>
+  <div id="chart_MOD_div"></div><br/>
+  <div id="chart_PHN_div"></div><br/>
+  <div id="chart_div"></div><br/>
+  <div id="chart_PPT_div"></div><br/>
+  <div id="chart_CWD_div"></div><br/>
+  <div id="chart_AWS_div"></div><br/>
+  <div id="chart_LEP_div"></div><br/>
+</div>
+
+</html>
+

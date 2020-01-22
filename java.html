@@ -1,0 +1,727 @@
+<script type="text/javascript">
+
+google.charts.load('current', {
+'packages': ['corechart', 'controls']
+});
+//debugger;
+google.charts.setOnLoadCallback(drawChart);
+$(window).load(function() {
+var delay = 3000;
+setTimeout(function() 
+           
+    {  
+        $('#loading').fadeOut();
+    },
+    delay
+) ;
+     
+  });
+
+// drawChart is long function, contains sub functions
+function drawChart() {
+//get plant info from spreadsheet
+var queryStringPlants = encodeURIComponent('SELECT A,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,AA,AB,AC,AD OFFSET 0');
+var queryPlants = new google.visualization.Query(
+'https://docs.google.com/spreadsheets/d/1OivFlT0l8X7u8ZoBojsTCgn1UeZQfBPf-VeoQy6PHkU/gviz/tq?sheet=Plants&headers=1&range=1:200&tq=' + queryStringPlants);
+//get watershed dataset from sppreadsheet
+var queryStringWatershed = encodeURIComponent('SELECT A,B,C,D,E,F,G,H,I,J,K,L,M OFFSET 0');
+var queryWatershed = new google.visualization.Query(
+'https://docs.google.com/spreadsheets/d/1OivFlT0l8X7u8ZoBojsTCgn1UeZQfBPf-VeoQy6PHkU/gviz/tq?sheet=WatershedNormFlattened&headers=1&range=1:550&tq=' + queryStringWatershed);
+//get pheno info from spreadsheet
+var queryStringPheno = encodeURIComponent('SELECT A,B,C,D,E');
+var queryPheno = new google.visualization.Query(
+'https://docs.google.com/spreadsheets/d/1QaPzgEMoUG_BLLgZzP7j91tkDIqtOkarr4kCA5Ie8f8/gviz/tq?sheet=Plants&headers=1&range=1:1000&tq=' + queryStringPheno);
+//get soil infro from spreadsheet
+var queryStringSoil = encodeURIComponent('SELECT A,B,C');
+var querySoil = new google.visualization.Query(
+'https://docs.google.com/spreadsheets/d/1UZXci5qG8OVm6n6hnY5gIHfyOia8j4JeFwPATg7PAE0/gviz/tq?sheet=soil&headers=1&range=1:19000&tq=' + queryStringSoil);    
+//Lambdas is plant-specific formula into which climate data is entered into order to produce site suitability scores. Formula is stored as sinngle string which is parsed later
+var queryStringLambdas = encodeURIComponent('SELECT A,B OFFSET 0');
+var queryLambdas = new google.visualization.Query(
+'https://docs.google.com/spreadsheets/d/1p_Q4C9RnDpQejaIMagEnavBG-Qwfm3vguxNxVCVlClI/gviz/tq?sheet=ParNormLQP&headers=1&range=1:200&tq=' + queryStringLambdas);
+
+//send each query, rest of script will run once all have been sent
+queryWatershed.send(function(response) {
+handleQueryResponse(response, 0);
+});
+queryPheno.send(function(response) {
+handleQueryResponse(response, 1);
+});
+querySoil.send(function(response) {
+handleQueryResponse(response, 4);
+});
+queryLambdas.send(function(response) {
+handleQueryResponse(response, 2);
+});
+queryPlants.send(function(response) {
+handleQueryResponse(response, 3);
+});
+	  // create an array containing one false for each query
+	  var ready = [false, false,false,false,false]; //used in handelQueryResponse
+	  // create an array to hold the DataTables
+	  var dataArray = []; //used in handelQueryResponse
+
+
+	  function handleQueryResponse(response, index) {
+		if (response.isError()) {
+		  alert('Error in query ' + index + ': ' + response.getMessage() + ' ' + response.getDetailedMessage());
+		  return;
+		}
+		ready[index] = true; //these are made outside of function
+		dataArray[index] = response.getDataTable(); //these are made outside of function
+		var allReady = true;
+		// check if all the queries have returned
+		for (var i = 0; i < ready.length; i++) {
+		  if (!ready[i]) {
+			allReady = false;
+			break;
+		  }
+		}
+
+		// if all the queries have returned, draw the charts and tables
+		if (allReady) {
+		  // adding selected watershed info to plant info, so we can chart all from one source
+		  var data = dataArray[3]; //the basic plant dataset
+		  //init map unit number, just random
+          var mukey= 459705
+
+		  //the phenodata is in a different format (point data) and needs to be kept seperate
+		  var phenoData = dataArray[1];
+		  phenoData.insertColumn(2,'number','plantNum');
+		  var distinct = phenoData.getDistinctValues(5)
+		  for (var j = 0; j < phenoData.getNumberOfRows(); j++){ 
+			 var spec = phenoData.getValue(j,5);
+			 for(var k = 0; k < distinct.length; k++){
+			  var spec2 = distinct[k];
+			  if(spec == spec2){
+			  phenoData.setValue(j, 2, k); //id num
+			 break;
+			  }
+		  }
+		  }
+          
+          //the lambdas + the climate data + the soil is used to create the dataset that actually makes the chart
+          var lambData = dataArray[2];
+          var modData = new google.visualization.DataTable();
+          modData.addColumn('string', 'Species');
+          modData.addColumn('number', 'Historic Occ Likelihood');
+          modData.addColumn('number', 'CNRM Occ Likelihood');
+          modData.addColumn('number', 'MIROC Occ Likelihood');
+         for (var i = 0; i < data.getNumberOfRows(); i++) {
+		  modData.addRow([data.getValue(i,0),0,0,0]);
+		}
+          
+		 //set up templates for each chart; all are slightly different
+         //min/max values are important for aesthetic reasons
+         var phnoptions = {
+			title: 'Species Phenology',
+			sizeAxis:{
+			   maxSize:50,
+			   minSize:0,
+			   minValue:0,
+			   maxValue:900
+			},
+			vAxis: {
+			  title: '',
+			  format: "#",
+			  textStyle:{
+			  fontSize:11
+			  },
+			  baselineColor:'none',
+			  viewWindowMode: 'pretty',
+			 //textPosition: 'in',
+			 gridlines:{
+			   count: 70,
+			   color:'none'
+			 }
+			},
+			hAxis: {
+			  title: 'Month',
+			  viewWindowMode: 'pretty',
+			  ticks:[{v:0,f:''},{v:1,f:'January'},{v:2,f:'February'},{v:3,f:'March'},{v:4,f:'April'},{v:5,f:'May'},{v:6,f:'June'},{v:7,f:'July'},{v:8,f:'August'},{v:9,f:'September'},{v:10,f:'October'},{v:11,f:'November'},{v:12,f:'December'},{v:13,f:''}]
+			  
+			 // maxAlternation: 1
+			},
+			series: {
+			  0: {
+				type: 'bubble'
+			  }
+			},
+			chartArea:{
+			height:$(window).height()*0.8
+			},
+			width: $(window).width()*0.85,
+			height:  $(window).height()
+		  };
+
+		  var modoptions = {
+          title: 'Species Occurrence Likelihood',
+          hAxis: {
+			  title: 'Species',
+			  maxAlternation: 1
+			},
+          vAxis: {
+              maxValue: 1,
+              minValue: 0
+          },
+          pointSize: 12,
+          series: [
+          {color: '#FF0000'},
+          {color: '#BB8FCE'},
+          {color: '#2980B9'}
+          ],          
+          chartArea:{
+			width: $(window).width()*0.57,
+			},
+			width: $(window).width()*0.75,
+			height:  $(window).height()*0.75
+        };
+
+		  // mod chart
+		  var modView = new google.visualization.DataView(modData)
+		  modView.setColumns([0,1,2,3])
+		  var modchart = new google.visualization.ChartWrapper({
+			'chartType': 'ScatterChart',
+			'containerId': 'chart_MOD_div',
+			'dataTable': modView,
+			'options': modoptions
+		  });
+          
+          var phnView = new google.visualization.DataView(phenoData)
+		  phnView.setColumns([0,1,2,3,4])
+		  var phnchart = new google.visualization.ChartWrapper({
+			'chartType': 'BubbleChart',
+			'containerId': 'chart_PHN_div',
+			'dataTable': phnView,
+			'options': phnoptions
+		  });
+		  
+          google.visualization.events.addOneTimeListener(modchart, 'ready', function() {
+		  //window resize doesn't seem to work
+		  window.addEventListener('resize', function () {
+		  filterChart()}, false);
+		 
+         //Adds plant names to dropdown
+		  var filterValues = data.getDistinctValues(0);
+		  $.each(filterValues, function(index, value) {
+			$('.selectable').append('<li>' + value + '</li>');
+		  });
+          //**********leaflet Stuff***************************************
+          	var Esri_WorldImagery = L.tileLayer('http://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+		attribution: 'Tiles &copy; Esri &mdash; Source: Esri, i-cubed, USDA, USGS, AEX, GeoEye, Getmapping, Aerogrid, IGN, IGP, UPR-EGP, and the GIS User Community'
+	});
+    var streetmap = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+});
+	
+    var basemaps = {
+    "Streets":streetmap,
+    "Satellite":Esri_WorldImagery
+    };
+    //point blue
+    var map = L.map('mapid').setView([38.227972,-122.591854], 10);
+
+	var features = [];	// holder for selected polygon boundary
+			map.defaults = {
+				icon: new L.Icon({
+					iconUrl: 'red_dot.png',
+					iconSize: [16, 16],
+					iconAnchor: [8, 8],
+					shadowUrl: 'dot_shadow.png',
+					shadowSize: [16, 16],
+					shadowAnchor: [8, 8]
+				}),
+				editable: true,
+				color: '#AA0000',
+				weight: 3,
+				opacity: 1.0,
+				editable: true,
+				fillColor: '#AA0000',
+				fillOpacity: 0.2
+			};
+
+	map.addLayer(streetmap);
+  var soilmapLayer=  L.tileLayer.wms('https://SDMDataAccess.sc.egov.usda.gov/Spatial/SDM.wms', {
+	   layers:"mapunitpoly", 
+	   format:"image/png",
+	   transparent: true,
+	   attribution: "SDA WMS",
+	   maxZoom:18,
+	   minZoom:10,
+	});
+    
+    var overLap ={
+    "Soil Map Units":soilmapLayer
+    }
+    
+   L.control.layers(basemaps,overLap).addTo(map);
+	
+
+	var myStyle = {
+		"color": "#000080",
+		"weight": 2,
+		"opacity": 0.65,
+		"fillOpacity":0.0
+	};
+	function onEachFeature(feature, layer) {
+	   layer.on({
+	   click: onMapClick
+	   });
+	}
+	//watershed layer has to be in specific format, hosted on github
+    var countriesGeojsonURL = "https://amealor.github.io/watershed/watersheds.geojson"
+	$.getJSON(countriesGeojsonURL, function(response) {
+		var geojsonLayer = new L.GeoJSON(response, {
+			style: myStyle,
+			onEachFeature: onEachFeature
+		});
+		geojsonLayer.addTo(map);    
+	});
+
+	var popup = L.popup();
+
+	function onMapClick(e) {
+			$("#spinner")
+			   .spinner("value",e.target.feature.properties.waternum);
+				var url =  "HTTPS://sdmdataaccess.sc.egov.usda.gov/tabular/post.rest";
+				var wkt = "point(" + e.latlng.lng + " " + e.latlng.lat + ")";
+				// carry the coordinates along as the first returned record set.
+				var query1 = 
+					"select " + e.latlng.lat + " [lat], " + e.latlng.lng + " [lng];";
+				var query2 = 
+					"select top 1 MU.musym, MU.mukey "
+					+ "from mapunit MU, "
+					+ "SDA_Get_Mukey_from_intersection_with_WktWgs84('" + wkt + "') K "
+					+ "where MU.mukey = K.mukey;";
+				// An SDA User Defined Function (SDA_Get_Mupolygonkey_from_intersection_with_WktWgs84)
+				// is used to greatly optimize the spatially-indexed retrieval.
+				// See https://sdmdataaccess.sc.egov.usda.gov/documents/AdvancedQueries.html .
+				var query3 = 
+					"select top 1 mupolygongeo from mupolygon MU, "
+					+ "SDA_Get_Mupolygonkey_from_intersection_with_WktWgs84('" + wkt + "') K "
+					+ "where MU.mupolygonkey = K.mupolygonkey;";
+				var data = {
+					query: query1 + query2 + query3,
+					format: "json+columnname"
+				};
+				
+				$.post(url, data, function( callbackData ) {
+						// The first returned Table has the lat, long in the second row.
+						var latlngTable = callbackData.Table;
+						var latlng = [latlngTable[1][0], latlngTable[1][1]]
+						// the second table has the column names and values
+						var payloadTable = callbackData.Table1;
+						var content = "<table>";
+                        mukey = Number(payloadTable[1][1]);
+						var icol = 0;
+						while (icol < payloadTable[0].length) {
+							content += "<tr><td>" + payloadTable[0][icol] + "</td><td>" + payloadTable[1][icol] + "</td></tr>";
+							icol++;
+						};
+						popup
+							.setLatLng(latlng)
+							.setContent(content)
+							.openOn(map);
+					filterChart();
+                    }, 
+					"json");	
+			
+            };
+          
+          
+		  //*********Jquery UI stuff**************************************
+		  var _selectRange = false, _deselectQueue = [];
+		  $('.accordion').accordion({
+			active: false,
+			create: function() {
+			
+            //add plants by copy-pasting list
+			$('#msgbox').dialog({
+				autoOpen:false,
+				modal:true,
+				title: 'Add Plants',
+				buttons: {
+					Okay: function() 
+					{
+					var newComments = $('#ta').val().split("\n");
+					for(var k = 0; k < newComments.length; k++){
+			 
+					   var searchString = newComments[k];
+					   //console.log(searchString);
+					   $('.selectable li')
+						  .filter(function(idx){
+						  
+						  console.log(searchString);
+						  return ($(this).html()  == searchString);
+						  }).addClass('ui-selected');
+					   }
+					filterChart();
+					$(this).dialog('close');
+					},
+				Cancel: function() {
+					$(this).dialog('close');
+					}
+				},
+				close: function() {
+					//alert('AJAX update completed');
+				}
+			});
+
+			$("#listButton").click(function (event) {
+				event.preventDefault();
+				var id = $(this).data("id");
+				$('#msgbox').dialog('open');	
+			});
+			
+			$("#spinner").spinner({
+			  
+			   create: function( event, ui ) {
+				
+			   $("#spinner")
+			   .spinner("value",'2206300101')
+			  // .val('2206300101')
+			   },
+				stop: filterChart
+			  });
+
+
+			  $('.selectable').bind("mousedown", function(e) {
+				//e.metaKey = true;
+			  }).selectable({
+				filter: '*',
+                selecting: function (event, ui) {
+                  if (event.detail == 0) {
+                _selectRange = true;
+                return true;
+            }
+            if ($(ui.selecting).hasClass('ui-selected')) {
+                _deselectQueue.push(ui.selecting);
+            }
+        },
+        unselecting: function (event, ui) {
+            $(ui.unselecting).addClass('ui-selected');
+        },
+				stop: function () {
+            if (!_selectRange) {
+                $.each(_deselectQueue, function (ix, de) {
+                    $(de)
+                        .removeClass('ui-selecting')
+                        .removeClass('ui-selected');
+                });
+            }
+            _selectRange = false;
+            _deselectQueue = [];
+            filterChart();
+        }
+			  });
+			},
+			collapsible: true,
+			heightStyle: 'content'
+		  });
+
+		  $('.button-reset').button();
+		  $('.button-reset').button('disable');
+		  $('.button-reset').on('click', clearFilter);
+
+		  $("#spinner").spinner({
+			spin: function(event, ui) {
+
+			}
+		  });
+		  
+		   }); // end of addOneTimelistener
+
+		  phnchart.draw();
+          modchart.draw();
+		} //end of if(allready)
+
+	//update chart with selected plants and watershed- is called whenever a new plant is added or watershed is changed
+		function filterChart() {
+
+		  //soil stuff~~~~~~~~~~~~~~~~~~~~~~~
+          console.log(mukey);
+          console.log("wowowowoow");
+          var soilData= dataArray[4];
+          
+          var soilRow = soilData.getFilteredRows([{
+			column: 0,
+			value: mukey
+
+		  }])
+
+
+          //watershed stuff~~~~~~~~~~~~~~~~~~~~~~~~~~~~~`
+          var HOC = $("#spinner").spinner("value");
+          console.log("heyeyeyeyey")
+          console.log(HOC);
+		  //dataArray comes from original queries of google sheets
+          var watershedData = dataArray[0];
+          
+		  var watershedRow = watershedData.getFilteredRows([{
+			column: 0,
+			value: HOC
+		  }])
+		  //data is made in function that calls this function
+		  
+		  var chartView = {};
+		  var phnChartView = {};
+		  var selectedValues = [];
+		  $('.selectable li.ui-selected').each(function(index, selected) {
+			selectedValues.push(selected.innerHTML);
+		  });
+          
+          //run model!
+          var AWS = soilData.getValue(soilRow[0], 1)*100;
+          var EXP = soilData.getValue(soilRow[0], 2)*100;
+          var TMN= watershedData.getValue(watershedRow[0], 1)/10;
+          var TMX= watershedData.getValue(watershedRow[0], 2)/10;
+          var PPT= watershedData.getValue(watershedRow[0], 3);
+          var CWD= watershedData.getValue(watershedRow[0], 4)/10;
+//          var PPTMIN= watershedData.getValue(watershedRow[0], 5);
+//          var PPTMAX= watershedData.getValue(watershedRow[0], 6);
+//          var CWDMIN= watershedData.getValue(watershedRow[0], 9)/10;
+//          var CWDMAX= watershedData.getValue(watershedRow[0], 10)/10;
+          
+          var cnrmTMN= watershedData.getValue(watershedRow[0], 5)/10;
+          var cnrmTMX= watershedData.getValue(watershedRow[0], 6)/10;
+          var cnrmPPT= watershedData.getValue(watershedRow[0],7 );
+          var cnrmCWD= watershedData.getValue(watershedRow[0],8)/10;
+          
+//          var cnrmPPTMIN= watershedData.getValue(watershedRow[0],16 );
+//          var cnrmPPTMAX= watershedData.getValue(watershedRow[0], 8);
+//          var cnrmCWDMIN= watershedData.getValue(watershedRow[0], 18)/10;
+//          var cnrmCWDMAX= watershedData.getValue(watershedRow[0],12)/10;
+          
+          var mirocTMN= watershedData.getValue(watershedRow[0], 9)/10;
+          var mirocTMX= watershedData.getValue(watershedRow[0], 10)/10;
+          var mirocPPT= watershedData.getValue(watershedRow[0], 11);
+          var mirocCWD= watershedData.getValue(watershedRow[0], 12)/10;
+          
+//          var mirocPPTMIN= watershedData.getValue(watershedRow[0], 7);
+//          var mirocPPTMAX= watershedData.getValue(watershedRow[0], 15);
+//          var mirocCWDMIN= watershedData.getValue(watershedRow[0], 11)/10;
+//          var mirocCWDMAX= watershedData.getValue(watershedRow[0], 17)/10;
+          
+           var parDict = {
+          "soilAWS10060":0,
+          "EXP60":1,
+          "shednormTMN5":2,
+          "shednormTMX5":3,
+          "shednormPPT4":4,
+          "shednormCWD5":5 
+          };
+          var histList = [AWS,EXP,TMN,TMX,PPT,CWD];
+          var cnrmList = [AWS,EXP,cnrmTMN,cnrmTMX,cnrmPPT,cnrmCWD];
+          var mirocList = [AWS,EXP,mirocTMN,mirocTMX,mirocPPT,mirocCWD];
+          
+//          var histList = [AWS,EXP,TMN,TMX,PPTMIN,PPTMAX,CWDMIN,CWDMAX];
+//          var cnrmList = [AWS,EXP,cnrmTMN,cnrmTMX,cnrmPPTMIN,cnrmPPTMAX,cnrmCWDMIN,cnrmCWDMAX];
+//          var mirocList = [AWS,EXP,mirocTMN,mirocTMX,mirocPPTMIN,mirocPPTMAX,mirocCWDMIN,mirocCWDMAX];
+          var linList = [1,4,7,10,22,16,19,13];
+          var quadList = [25,28,31,34,46,40,43,37];
+          var funDict = {
+          1:linDot,
+          2:quadDot,
+          3:prodDot
+          };
+          for(var k = 0; k < selectedValues.length; k++){
+			 var spec2 = selectedValues[k];
+			 for (var j = 0; j < lambData.getNumberOfRows(); j++){ 
+				var spec = lambData.getValue(j,1);;
+				if(spec == spec2){
+					var s = 0;
+                    var cn = 0;
+                    var mi = 0;
+                    var lamb2 = parseLamb(lambData.getValue(j,0))
+                    var lamb3 = lamb2.slice(0,-4);
+                    var lamb4 = lamb3.forEach(function(element){
+                    s+=funDict[getType(element)](element,histList);
+                    cn+=funDict[getType(element)](element,cnrmList)
+                    mi+=funDict[getType(element)](element,mirocList)
+                    });
+
+                    s -= parseFloat(lamb2[lamb2.length-4][1]);
+                    console.log(s);
+                    cn -= lamb2[lamb2.length-4][1];
+                    mi -= lamb2[lamb2.length-4][1];
+                    
+                    var q = Math.exp(s)/parseFloat(lamb2[lamb2.length-3][1])
+                    var cnq = Math.exp(cn)/lamb2[lamb2.length-3][1]
+                    var miq = Math.exp(mi)/lamb2[lamb2.length-3][1]
+                    console.log(parseFloat(lamb2[lamb2.length-1][1]));
+                    var cloglog = 1-Math.exp((0-Math.exp(parseFloat(lamb2[lamb2.length-1][1])))*q)
+                    var cncloglog = 1-Math.exp((0-Math.exp(lamb2[lamb2.length-1][1]))*cnq)
+                    var micloglog = 1-Math.exp((0-Math.exp(lamb2[lamb2.length-1][1]))*miq)
+
+                    for (var m = 0; m < modData.getNumberOfRows(); m++){
+                    var spec3 = modData.getValue(m,0);
+                    if(spec == spec3){
+                    modData.setValue(m, 1, cloglog); //id num
+                    modData.setValue(m, 2, cncloglog); //id num
+                    modData.setValue(m, 3, micloglog); //id num
+
+                    }
+                    }
+			  }
+		  }
+		  }
+          
+          function parseLamb(lamb){
+          var lamb2 = lamb.split(';').map(function(x){return x.split(',')});
+          return(lamb2);
+          
+          };
+          
+          function getType(lamb){
+var lamb2 = lamb[0];
+if(lamb2.includes('^')){
+return(2) 
+} else if(lamb2.includes('*')){
+return(3)
+} else{
+return(1);
+}
+}
+          
+          function linDot(lamb,climList){
+          //linear formula
+          console.log(parDict[lamb[0]]);
+          var clim = climList[parDict[lamb[0]]]
+          var z = parseFloat(lamb[1])*(clim-parseFloat(lamb[2]))/(parseFloat(lamb[3])-parseFloat(lamb[2]))
+          if(isNaN(z)){
+          return(0)
+          }else{
+          return(z);
+          }
+          };
+          
+          function quadDot(lamb,climList){
+          //quad formula
+          var clim = climList[parDict[lamb[0].split('^')[0]]]
+          var z = parseFloat(lamb[1])*((clim*clim)-parseFloat(lamb[2]))/(parseFloat(lamb[3])-parseFloat(lamb[2]))
+          if(isNaN(z)){
+          return(0)
+          }else{
+          return(z);
+          }
+          };
+          
+          function prodDot(lamb,climList){
+          //product formula
+          var clim1 = climList[parDict[lamb[0].split('*')[0]]];
+          var clim2 = climList[parDict[lamb[0].split('*')[1]]];
+          var z = parseFloat(lamb[1])*((clim1*clim2)-parseFloat(lamb[2]))/(parseFloat(lamb[3])-parseFloat(lamb[2]))
+          if(isNaN(z)){
+          return(0)
+          }else{
+          return(z);
+          }
+          }
+          
+          function dotProd(lData,i,l,lamb){
+          
+          //clamping
+          if(lamb < lData.getValue(l,i+1)){
+          lamb = lData.getValue(l,i+1);
+          };
+          if(lamb > lData.getValue(l,i+2)){
+          lamb = lData.getValue(l,i+2);
+          };
+          var z = lData.getValue(l,i)*(lamb-lData.getValue(l,i+1))/(lData.getValue(l,i+2)-lData.getValue(l,i+1))
+         // console.log(z);
+          if(isNaN(z)){
+          return(0)
+          }else{
+          return(z);
+          }
+          }
+	//create chartview based off of selected plants
+		  if (selectedValues.length > 0) {
+		  //if any plants are selected, enable the button that allows you to unselect everything
+			$('.selectable').closest('.accordion').find('.button-reset').button('enable');
+			chartView.rows = data.getFilteredRows([{
+			  column: 0,
+			  test: function(value) {
+				return (selectedValues.indexOf(value) > -1);
+			  }
+			}]);
+			
+			phnChartView.rows = phenoData.getFilteredRows([{
+			  column: 5,
+			  test: function(value) {
+				return (selectedValues.indexOf(value) > -1);
+			  }
+			}]);
+			
+		  phnChartView.rows.push(767);
+		  phnChartView.rows.push(768);
+		  }
+		  phenoData.setValue(767, 2, -1);
+		  phenoData.setValue(768, 2,selectedValues.length+1 )
+		  //come back later and make this dynamic
+		  phnchart.setView(phnChartView);
+//		  chart.setView(chartView);
+//		  pptchart.setView(chartView);
+//		  cwdchart.setView(chartView);
+//		  awschart.setView(chartView);
+//		  lepchart.setView(chartView);
+          modchart.setView(chartView);
+		  
+		  for(var k = 0; k < selectedValues.length; k++){
+			 var spec2 = selectedValues[k];
+			 for (var j = 0; j < phenoData.getNumberOfRows(); j++){ 
+				var spec = phenoData.getValue(j,5);
+				if(spec == spec2){
+					phenoData.setValue(j, 2, k); //id num
+			  
+			  }
+		  }
+		  }
+		  
+		  phnchart.draw();
+//		  chart.draw();
+//		  pptchart.draw();
+//		  cwdchart.draw();
+//		  awschart.draw();
+//		  lepchart.draw();
+          modchart.draw();
+		  console.log(selectedValues.length);
+		  for ( var i = -2; i < 100; i ++ ){
+			$('#chart_PHN_div svg text[text-anchor="end"]:contains("'+i+'")').text(function(j,t){
+				if (t == i){
+					if (i >= selectedValues.length || i < 0){
+						return " ";
+					}
+					return selectedValues[i];
+				}else{
+				return t ;
+				}
+			});
+		}
+		  
+		} //filterChart
+
+		function clearFilter(sender) {
+		  var accordion;
+
+		  sender.preventDefault();
+		  sender.stopPropagation();
+
+		  accordion = $(sender.target).closest('.accordion');
+		  accordion.find('.selectable li').removeClass('ui-selected');
+		  accordion.accordion('option', 'active', false);
+		  $(sender.target).closest('button').button('disable');
+		  filterChart();
+
+		  return false;
+		}
+
+		//  chart.draw();
+
+		//} //handleQueryResponse
+
+	  }
+	} // end of drawChart
+
+		
+		</script>
